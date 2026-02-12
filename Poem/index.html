@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Separation — typographic experience</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Petit+Formal+Script&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+  <div class="stage" id="stage">
+    <div class="content" id="content">
+
+      <div class="meta">
+        <div class="title">Separation</div>
+        <div class="by">By W. S. Merwin</div>
+      </div>
+
+      <div class="line line1" id="line1"></div>
+      <div class="line line2" id="line2"></div>
+      <div class="line line3" id="line3"></div>
+    </div>
+  </div>
+
+  <!-- <div class="hint">Drag “thread” → into the needle • Click every word in line 3 to stitch • Drag on “color” to tint</div> -->
+
+  <script>
+
+    function makeWord(text, extraClass="") {
+      const w = document.createElement("span");
+      w.className = `w ${extraClass}`.trim();
+      w.textContent = text;
+    
+      const ghost = document.createElement("span");
+      ghost.className = "afterimage";
+      ghost.textContent = text;
+      w.appendChild(ghost);
+    
+      return w;
+    }
+    function addSpace(parent) {
+      const sp = document.createElement("span");
+      sp.className = "sp";
+      sp.textContent = " ";
+      parent.appendChild(sp);
+    }
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+    
+    const state = {
+      threaded: false,
+      stitchedClicks: [],
+      stitchedWordSet: new Set(),
+      needleMissedOnce: false
+    };
+    
+    /* ----------------------------
+       layout text
+    ---------------------------- */
+    const line1 = document.getElementById("line1");
+    const line2 = document.getElementById("line2");
+    const line3 = document.getElementById("line3");
+    
+    const l1Words = ["Your","absence","has","gone","through","me"];
+    l1Words.forEach((t,i)=>{
+      const w = makeWord(t, "tinted faint");
+      w.dataset.role = "line1word";
+      line1.appendChild(w);
+      if(i < l1Words.length-1) addSpace(line1);
+    });
+    
+    const l2Prefix = ["Like"];
+    l2Prefix.forEach((t)=>{
+      const w = makeWord(t, "tinted faint");
+      w.dataset.role="line2word";
+      line2.appendChild(w);
+      addSpace(line2);
+    });
+    
+    const threadEl = makeWord("thread", "thread tinted faint");
+    threadEl.dataset.role = "thread";
+    line2.appendChild(threadEl);
+    addSpace(line2);
+    
+    ["through","a"].forEach((t)=>{
+      const w = makeWord(t, "tinted faint");
+      w.dataset.role="line2word";
+      line2.appendChild(w);
+      addSpace(line2);
+    });
+    
+    const needleWrap = document.createElement("span");
+    needleWrap.className = "needleWrap";
+    
+    const needle = document.createElement("span");
+    needle.className = "needle";
+    needle.textContent = "needle";
+    needle.dataset.role = "needle";
+    needleWrap.appendChild(needle);
+    
+    const dot = document.createElement("span");
+    dot.className = "w tinted faint";
+    dot.textContent = ".";
+    needleWrap.appendChild(dot);
+    
+    line2.appendChild(needleWrap);
+    
+    const l3Words = ["Everything","I","do","is","stitched","with","its","color."];
+    l3Words.forEach((t,i)=>{
+      let cls = "tinted faint";
+      if(t === "stitched") cls += " stitched";
+      if(t === "its") cls += " itsWord";
+      if(t === "color.") cls += " colorWord";
+    
+      const w = makeWord(t, cls);
+      w.dataset.role = "line3word";
+      if(t === "Everything") w.dataset.special = "everything";
+      if(t === "stitched") w.dataset.special = "stitched";
+      if(t === "color.") w.dataset.special = "color";
+
+    
+      line3.appendChild(w);
+      if(i < l3Words.length-1) addSpace(line3);
+    });
+    
+    /* ----------------------------
+       Hover hollow + afterimage
+    ---------------------------- */
+    function enableHollowHover(container){
+      container.querySelectorAll(".w").forEach(w=>{
+        w.addEventListener("mouseenter", ()=>{
+          if(w.classList.contains("connector")) return;
+    
+          w.classList.add("hollow","ghost");
+          clearTimeout(w._hollowT);
+          w._hollowT = setTimeout(()=> w.classList.remove("hollow"), 260);
+    
+          clearTimeout(w._ghostT);
+          w._ghostT = setTimeout(()=> w.classList.remove("ghost"), 650);
+        });
+      });
+    }
+    enableHollowHover(line1);
+
+    
+    /* ----------------------------
+       Line 1 drag tension field
+    ---------------------------- */
+    let draggingTension = false;
+    line1.addEventListener("pointerdown", (e)=>{
+      draggingTension = true;
+      line1.setPointerCapture(e.pointerId);
+      line1.classList.add("tension");
+    });
+    line1.addEventListener("pointerup", (e)=>{
+      draggingTension = false;
+      line1.releasePointerCapture(e.pointerId);
+      line1.classList.remove("tension");
+      line1.style.setProperty("--tension", 0);
+      line1.querySelectorAll(".w").forEach(w=> w.style.transform = "");
+    });
+    line1.addEventListener("pointermove", (e)=>{
+      if(!draggingTension) return;
+      const rect = line1.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const centerY = rect.height/2;
+      const t = Math.min(12, Math.max(0, Math.abs(py-centerY)));
+      line1.style.setProperty("--tension", t);
+    
+      const words = [...line1.querySelectorAll(".w")];
+      for(const w of words){
+        const r = w.getBoundingClientRect();
+        const cx = (r.left+r.right)/2 - rect.left;
+        const cy = (r.top+r.bottom)/2 - rect.top;
+        const d = Math.hypot(cx-px, cy-py);
+        const k = Math.max(0, 1 - d/220);
+        w.style.transform = `translateY(${-k*6}px) scaleX(${1 + k*0.20})`;
+      }
+    });
+    
+    /* ----------------------------
+       Thread draggable into needle eye
+    ---------------------------- */
+    let threadDrag = { active:false, startX:0, startY:0, dx:0, dy:0 };
+    
+    function setThreadTranslate(dx, dy){
+      threadEl.style.setProperty("--dx", dx + "px");
+      threadEl.style.setProperty("--dy", dy + "px");
+    }
+    
+    function needleEyeRect(){
+      const nr = needle.getBoundingClientRect();
+      const w = nr.width, h = nr.height;
+      const eye = {
+        left:  nr.left + w*0.55,
+        right: nr.left + w*1.05,
+        top:   nr.top  + h*0.15,
+        bottom:nr.top  + h*0.85
+      };
+      return eye;
+    }
+    
+    function pointInRect(x,y,r){
+      return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom;
+    }
+    
+    function lockThread(){
+  state.threaded = true;
+  threadEl.classList.remove("dragging");
+  threadEl.classList.add("locked");
+  setThreadTranslate(0,0);
+
+  // create tail only once
+  if(!threadEl.querySelector(".tail")){
+    const tail = document.createElement("span");
+    tail.className = "tail";
+    // typographic "thread" (no images) — you can change the character
+    tail.textContent = "——————————————";
+    threadEl.appendChild(tail);
+  }
+
+  // small “through” pull motion
+  threadEl.animate([
+    { transform: "translate(0,0)" },
+    { transform: "translate(18px, -2px)" },
+    { transform: "translate(0,0)" }
+  ], { duration: 520, easing: "cubic-bezier(.2,.9,.2,1)" });
+
+}
+
+    
+    threadEl.addEventListener("pointerdown", (e)=>{
+      if(state.threaded) return;
+      threadDrag.active = true;
+      threadDrag.startX = e.clientX;
+      threadDrag.startY = e.clientY;
+      threadEl.classList.add("dragging");
+      threadEl.setPointerCapture(e.pointerId);
+    });
+    
+    threadEl.addEventListener("pointermove", (e)=>{
+      if(!threadDrag.active || state.threaded) return;
+      threadDrag.dx = e.clientX - threadDrag.startX;
+      threadDrag.dy = e.clientY - threadDrag.startY;
+      setThreadTranslate(threadDrag.dx, threadDrag.dy);
+    
+      // collision check during drag
+      const eye = needleEyeRect();
+      if(pointInRect(e.clientX, e.clientY, eye)){
+        lockThread();
+        // stop dragging
+        threadDrag.active = false;
+        try{ threadEl.releasePointerCapture(e.pointerId); }catch(_){}
+      }
+    });
+    
+    threadEl.addEventListener("pointerup", (e)=>{
+      if(!threadDrag.active || state.threaded) return;
+      threadDrag.active = false;
+      try{ threadEl.releasePointerCapture(e.pointerId); }catch(_){}
+    
+      // if not locked, return
+      threadEl.classList.remove("dragging");
+      const dx = threadDrag.dx, dy = threadDrag.dy;
+      setThreadTranslate(0,0);
+      threadEl.animate([
+        { transform: `translate(${dx}px, ${dy}px)` },
+        { transform: "translate(0,0)" }
+      ], { duration: 360, easing: "ease-out" });
+    });
+    
+    
+/* ----------------------------
+   Hover stitch on line 3 words
+---------------------------- */
+line3.querySelectorAll('.w[data-role="line3word"]').forEach(w => {
+  w.addEventListener("mouseenter", () => {
+    // already stitched? do nothing
+    if (w.classList.contains("stitchedOnce")) return;
+    w.classList.add("stitchedOnce");
+
+    // add connector right after this word
+    const conn = document.createElement("span");
+    conn.className = "connector";
+    conn.textContent = "╱╲";
+
+    const sp = document.createElement("span");
+    sp.className = "sp";
+    sp.textContent = " ";
+
+    w.insertAdjacentElement("afterend", conn);
+    conn.insertAdjacentElement("afterend", sp);
+
+    // optional: tint the word as "stitched"
+    w.classList.add("on");
+  });
+});
+
+/* ----------------------------
+   Click “color.” → toggle colorful background
+---------------------------- */
+const colorWord = line3.querySelector('.w[data-special="color"]');
+
+if (colorWord) {
+  colorWord.style.cursor = "pointer";
+  colorWord.addEventListener("click", (e) => {
+    e.stopPropagation();
+    stage.classList.toggle("colorMode");
+  });
+}
+
+
+/* ----------------------------
+   Click “Everything” → ghost burst fills screen then disappears
+---------------------------- */
+
+// 1) Identify the word "Everything" in line 3
+const everythingWord = line3.querySelector('.w[data-special="everything"]');
+
+
+// 2) Create/reuse overlay container
+let ghostLayer = document.querySelector(".ghostBurst");
+if (!ghostLayer) {
+  ghostLayer = document.createElement("div");
+  ghostLayer.className = "ghostBurst";
+  document.body.appendChild(ghostLayer);
+}
+
+function rand(min, max){ return Math.random() * (max - min) + min; }
+
+function ghostBurstFromWord(wordEl){
+  if(!wordEl) return;
+
+  // optional: clear any previous burst
+  ghostLayer.innerHTML = "";
+
+  const r = wordEl.getBoundingClientRect();
+  const originX = r.left + r.width / 2;
+  const originY = r.top + r.height / 2;
+
+  const count = 48;                  // how many ghosts
+  const flyDur = 900;                // outward travel
+  const linger = 450;                // hang time
+  const fadeDur = 700;               // fade out time
+
+  for(let i=0;i<count;i++){
+    const g = document.createElement("div");
+    g.className = "ghostWord";
+    g.textContent = "Everything";
+
+    // start near the clicked word center (with tiny jitter)
+    const startX = originX + rand(-14, 14);
+    const startY = originY + rand(-10, 10);
+
+    // end somewhere across screen (random)
+    const endX = rand(0, window.innerWidth);
+    const endY = rand(0, window.innerHeight);
+
+    // rotation + scale variety
+    const rot0 = rand(-6, 6);
+    const rot1 = rand(-18, 18);
+    const s0 = rand(0.85, 1.15);
+    const s1 = rand(0.95, 1.35);
+
+    // opacity variety
+    const o = rand(0.25, 0.45);
+
+    g.style.opacity = o;
+    g.style.transform = `translate(${startX}px, ${startY}px) rotate(${rot0}deg) scale(${s0})`;
+
+    ghostLayer.appendChild(g);
+
+    // animate outward
+    const a1 = g.animate([
+      { transform: `translate(${startX}px, ${startY}px) rotate(${rot0}deg) scale(${s0})`, opacity: 0 },
+      { transform: `translate(${startX}px, ${startY}px) rotate(${rot0}deg) scale(${s0})`, opacity: o },
+      { transform: `translate(${endX}px, ${endY}px) rotate(${rot1}deg) scale(${s1})`, opacity: o }
+    ], {
+      duration: flyDur,
+      easing: "cubic-bezier(.2,.9,.2,1)",
+      fill: "forwards",
+      delay: i * 10
+    });
+
+    // fade out after a linger
+    a1.onfinish = () => {
+      g.animate(
+        [
+          { opacity: o, filter: "blur(0.2px)" },
+          { opacity: 0, filter: "blur(0.6px)" }
+        ],
+        { duration: fadeDur, easing: "ease", fill: "forwards", delay: linger }
+      ).onfinish = () => g.remove();
+    };
+  }
+}
+
+// 3) Hook click interaction
+if (everythingWord) {
+  everythingWord.style.cursor = "pointer";
+  everythingWord.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ghostBurstFromWord(everythingWord);
+  });
+}
+
+    
+    /* ----------------------------
+       Breathing
+    ---------------------------- */
+    const stage = document.getElementById("stage");
+    let breatheT = 0;
+    function breathe(){
+      breatheT += 0.008;
+      const s = 1 + Math.sin(breatheT) * 0.002;
+      stage.style.transform = `scale(${s})`;
+      requestAnimationFrame(breathe);
+    }
+    breathe();
+
+function setStep(step){
+  stage.dataset.step = String(step);
+}
+
+// initial
+setStep(0);
+
+function updateStepFromScroll(){
+  const rect = stage.getBoundingClientRect();
+  const stageTopInDoc = window.scrollY + rect.top;
+  const stageHeight = rect.height;
+
+  // progress through the stage (0..1)
+  const progress = clamp(
+    (window.scrollY - stageTopInDoc) / (stageHeight - window.innerHeight),
+    0,
+    1
+  );
+
+  // pick step thresholds
+  const step = (progress < 0.33) ? 0 : (progress < 0.66) ? 1 : 2;
+  setStep(step);
+}
+
+window.addEventListener("scroll", updateStepFromScroll, { passive: true });
+window.addEventListener("resize", updateStepFromScroll);
+updateStepFromScroll();
+
+    </script>
+    
+</body>
+</html>
